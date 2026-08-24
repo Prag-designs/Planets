@@ -121,7 +121,7 @@ const frEl = document.getElementById('fr');
 let W = 0, H = 0, DPR = 1, PAD = 60, x0 = 0, y0 = 0, x1 = 0, y1 = 0;
 let minDim = 0, maxDim = 0, SPEED = 600;
 
-let waves = [], origins = [], stars = [];
+let waves = [], origins = [], links = [], stars = [];
 let record = 0, firstPing = false;
 let t = 0, lastAuto = 0;
 let holding = false, hx = 0, hy = 0, tx = 0, ty = 0, holdStart = 0, charge = 0;
@@ -199,7 +199,18 @@ function ping(px, py, ch){
   const src = { x: px, y: py, born: t, pulse: 0.55, echoes: 0, first: -1 };
 
   origins.push(src);
-  if (origins.length > MAX_NODES) origins.shift();
+  if (origins.length > MAX_NODES){
+    const dead = origins.shift();
+    links = links.filter(l => l.a !== dead && l.b !== dead);
+  }
+  // draw a line from this new sounding to its nearest neighbour — a constellation grows
+  let near = null, nd = Infinity;
+  for (const o of origins){
+    if (o === src) continue;
+    const d = Math.hypot(o.x - src.x, o.y - src.y);
+    if (d < nd){ nd = d; near = o; }
+  }
+  if (near) links.push({ a: near, b: src, p: 0 });
 
   const RINGS = 4, RING_GAP = 0.14;                  // several rings per source, like water
   const mk = (cx, cy, order, gain, wall) => {
@@ -266,6 +277,7 @@ function update(dt){
   }
 
   for (const o of origins) o.pulse *= Math.pow(0.0016, dt);
+  for (const l of links) if (l.p < 1) l.p = Math.min(1, l.p + dt / 0.42);
 
   if (holding){
     charge = Math.min(1, (t - holdStart) / CHARGE_MS);
@@ -415,6 +427,13 @@ function drawContacts(){
 
 function drawNodes(){
   ctx.save();
+  for (const l of links){
+    const e = l.p < 1 ? l.p * l.p * (3 - 2 * l.p) : 1;
+    const a = 0.16 + 0.3 * Math.max(l.a.pulse, l.b.pulse);
+    ctx.strokeStyle = `rgba(198,224,255,${a * e})`; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(l.a.x, l.a.y);
+    ctx.lineTo(l.a.x + (l.b.x - l.a.x) * e, l.a.y + (l.b.y - l.a.y) * e); ctx.stroke();
+  }
   ctx.globalCompositeOperation = 'lighter';
   for (const o of origins){
     const grow = Math.min(1, (t - o.born) / 0.32), p = Math.min(1, o.pulse);
@@ -507,7 +526,7 @@ window.addEventListener('keydown', e => {
 window.addEventListener('keyup', e => { if (e.code === 'Space'){ e.preventDefault(); up(); } });
 
 function reset(){
-  waves = []; origins = [];
+  waves = []; origins = []; links = [];
   record = 0; firstPing = false;
   rtEl.classList.remove('on'); frEl.classList.remove('on');
   setTimeout(() => hintEl.classList.remove('gone'), 500);
