@@ -180,7 +180,7 @@ function tone(freq, vol, dur, type){
 function ampOf(w, r){
   const inside = 1 + r / (0.22 * minDim);
   const geo = inside > 0.0001 ? 1 / Math.sqrt(inside) : 3;   // guard rings not yet born
-  const soak = Math.exp(-r / (w.auto ? 0.15 * minDim : 1.15 * maxDim));
+  const soak = Math.exp(-r / (w.auto ? 0.15 * minDim : 0.34 * minDim));  // fade over the sector, not the whole screen
   return w.amp0 * geo * soak;
 }
 function leakReach(ch){ return PAD * (0.12 + 0.74 * ch); }
@@ -218,7 +218,7 @@ function ping(px, py, ch){
       waves.push({
         cx, cy,
         t0: t + i * RING_GAP,                         // each following ring emerges a beat later
-        amp0: amp * gain * Math.pow(0.7, i),          // and a little fainter
+        amp0: amp * gain,                              // equal crests; ampOf(r) fades each by its radius
         order, wall, speed, src, ch,
         echoed: order === 0 || i > 0                  // only the leading ring makes the echo tone
       });
