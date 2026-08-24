@@ -178,7 +178,8 @@ function tone(freq, vol, dur, type){
 
 // ---------- physics ----------
 function ampOf(w, r){
-  const geo = 1 / Math.sqrt(1 + r / (0.22 * minDim));
+  const inside = 1 + r / (0.22 * minDim);
+  const geo = inside > 0.0001 ? 1 / Math.sqrt(inside) : 3;   // guard rings not yet born
   const soak = Math.exp(-r / (w.auto ? 0.15 * minDim : 1.15 * maxDim));
   return w.amp0 * geo * soak;
 }
@@ -200,8 +201,18 @@ function ping(px, py, ch){
   origins.push(src);
   if (origins.length > MAX_NODES) origins.shift();
 
-  const mk = (cx, cy, order, gain, wall) =>
-    waves.push({ cx, cy, t0: t, amp0: amp * gain, order, wall, speed, src, ch, echoed: order === 0 });
+  const RINGS = 4, RING_GAP = 0.14;                  // several rings per source, like water
+  const mk = (cx, cy, order, gain, wall) => {
+    for (let i = 0; i < RINGS; i++){
+      waves.push({
+        cx, cy,
+        t0: t + i * RING_GAP,                         // each following ring emerges a beat later
+        amp0: amp * gain * Math.pow(0.7, i),          // and a little fainter
+        order, wall, speed, src, ch,
+        echoed: order === 0 || i > 0                  // only the leading ring makes the echo tone
+      });
+    }
+  };
 
   mk(px, py, 0, 1, -1);
   // exact mirror sources: the sector's edges send your own sounding back
