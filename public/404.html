@@ -27,7 +27,7 @@ body{font-family:var(--tech);touch-action:none;cursor:crosshair}
 canvas{position:fixed;inset:0;display:block}
 
 #vignette{position:fixed;inset:0;pointer-events:none;
-  background:radial-gradient(ellipse at center,transparent 56%,rgba(6,6,18,.55) 100%)}
+  background:radial-gradient(ellipse at center,transparent 58%,rgba(6,6,18,.4) 100%)}
 
 .ui{position:fixed;inset:0;pointer-events:none;user-select:none;-webkit-user-select:none}
 .t{font-size:11px;letter-spacing:var(--track);text-transform:uppercase;color:var(--hud-faint);line-height:2}
@@ -302,9 +302,9 @@ function bgGrad(){
   if (key !== bgKey){
     bgKey = key;
     bg = ctx.createRadialGradient(W/2, H*0.45, 0, W/2, H*0.45, maxDim * 0.8);
-    bg.addColorStop(0, '#111634');
-    bg.addColorStop(0.5, '#0b0f22');
-    bg.addColorStop(1, '#080a16');
+    bg.addColorStop(0, '#0c0f1f');   // whisper of centre depth, same navy hue
+    bg.addColorStop(0.5, '#0a0d1c');  // the universe's flat background (sampled 0a0d1c)
+    bg.addColorStop(1, '#0a0d1c');   // flat like the universe; the vignette darkens the edges
   }
   return bg;
 }
