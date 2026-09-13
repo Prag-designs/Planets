@@ -96,3 +96,24 @@ test('song title: fetched from the provider oEmbed with only the bare id, cleane
   assert.equal(await fetchSongTitle(yt, { fetchImpl: async () => ({ ok: true, json: async () => ({ title: 'x'.repeat(500) }) }) }).then((t) => t.length), 120);
   assert.equal(await fetchSongTitle(null), null);
 });
+
+import { displayTitle } from '../lib/og-card.js';
+import { describe as describeCard, ogTags } from '../api/p.js';
+
+test('unfurl card: song titles lose their video junk and fit one line', () => {
+  assert.equal(displayTitle('Rick Astley - Never Gonna Give You Up (Official Video) (4K Remaster)'), 'Rick Astley - Never Gonna Give You Up');
+  assert.equal(displayTitle('Song Name [Official Lyric Video] | Label'), 'Song Name');
+  assert.equal(displayTitle('x'.repeat(100)).length <= 45, true);
+  assert.equal(displayTitle(null), null);
+});
+
+test('unfurl card: /p/<slug> tags point og:image at /api/og with 1200x630 declared, for known and unknown planets', () => {
+  const known = describeCard({ name: 'dear maya', message: 'hi', song: { provider: 'youtube', title: 'T' }, artworkUrl: 'https://x/art.jpg' }, 'dear-maya', 'https://go-astray.vercel.app');
+  assert.equal(known.image, 'https://go-astray.vercel.app/api/og?name=dear-maya');
+  const tags = ogTags(known);
+  assert.match(tags, /og:image:width" content="1200"/);
+  assert.match(tags, /og:image:height" content="630"/);
+  assert.match(tags, /twitter:card" content="summary_large_image"/);
+  const unknown = describeCard(null, 'gone', 'https://go-astray.vercel.app');
+  assert.equal(unknown.image, 'https://go-astray.vercel.app/api/og?name=gone');
+});

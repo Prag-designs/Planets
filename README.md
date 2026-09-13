@@ -59,9 +59,10 @@ no accounts · no logins · no tracking · no cookies — just two quiet, fair r
 ## 💌 planets for someone
 
 A planet can carry a **song** (a Spotify track or a YouTube video) and **one line** (80 characters).
-Its address is `https://go-astray.vercel.app/p/<name>`; the link unfurls with the planet's artwork,
-name and line (`api/p.js` injects Open Graph tags into the built app for crawlers), and opening it
-flies the visitor across the void to that planet, where the line appears with a play control.
+Its address is `https://go-astray.vercel.app/p/<name>`; the link unfurls as a card, the planet as a
+lit coin with its name, line and song (`api/og.js` renders a 1200x630 PNG with `@vercel/og`;
+`api/p.js` injects the Open Graph tags into the built app for crawlers), and opening it flies the
+visitor across the void to that planet, where the line appears with a play control.
 
 - **audio only.** The provider's player exists for the sound and is never shown; the panel has its
   own play/pause and shows the song's title, which the server fetched once at creation through the

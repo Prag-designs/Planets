@@ -17,6 +17,7 @@ import { songUrl } from '../lib/song.js';
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 export function ogTags({ url, title, description, image }) {
+  const sized = !!image && /\/api\/og\?/.test(image);
   return [
     `<title>${esc(title)}</title>`,
     `<meta name="description" content="${esc(description)}">`,
@@ -26,6 +27,9 @@ export function ogTags({ url, title, description, image }) {
     `<meta property="og:title" content="${esc(title)}">`,
     `<meta property="og:description" content="${esc(description)}">`,
     image ? `<meta property="og:image" content="${esc(image)}">` : '',
+    sized ? `<meta property="og:image:width" content="1200">` : '',
+    sized ? `<meta property="og:image:height" content="630">` : '',
+    sized ? `<meta property="og:image:type" content="image/png">` : '',
     `<meta name="twitter:card" content="${image ? 'summary_large_image' : 'summary'}">`,
     `<meta name="twitter:title" content="${esc(title)}">`,
     `<meta name="twitter:description" content="${esc(description)}">`,
@@ -35,15 +39,17 @@ export function ogTags({ url, title, description, image }) {
 
 export function describe(planet, slug, origin) {
   const url = `${origin}/p/${slug}`;
+  // the card is rendered by api/og.js; unknown planets still get a generic one
+  const image = `${origin}/api/og?name=${slug}`;
   if (!planet) {
-    return { url, title: 'a planet in ASTRAY', description: 'someone made a planet. tap to fly there.', image: null };
+    return { url, title: 'a planet in ASTRAY', description: 'someone made a planet. tap to fly there.', image };
   }
   const title = `${planet.name} · a planet in ASTRAY`;
   const hear = planet.song ? (planet.song.title ? ` and hear “${planet.song.title}”` : ' and hear its song') : '';
   const description = planet.message
     ? `“${planet.message}” — tap to fly there${hear}.`
     : `a planet someone made. tap to fly there${hear}.`;
-  return { url, title, description, image: planet.artworkUrl || null, song: songUrl(planet.song) };
+  return { url, title, description, image, song: songUrl(planet.song) };
 }
 
 let cachedShell = null;

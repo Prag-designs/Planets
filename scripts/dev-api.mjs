@@ -18,6 +18,7 @@ import { normalizeNameKey } from '../lib/name.js';
 import { sanitizeSong, sanitizeMessage, nameFromSlug } from '../lib/song.js';
 import { capacityForType } from '../lib/capacity.js';
 import { fetchSongTitle } from '../lib/song-meta.js';
+import { renderCard } from '../lib/og-card.js';
 
 const PORT = Number(process.env.PORT || 3000);
 const DIR = join(process.cwd(), '.dev-universe');
@@ -134,6 +135,15 @@ const server = http.createServer(async (req, res) => {
       if (!p) return json(res, 404, { error: 'not_found' });
       const { id, name, createdAt, starId, artworkUrl, song, message } = publicPlanet(p);
       return json(res, 200, { planet: { id, name, createdAt, starId, artworkUrl, song, message } });
+    }
+    if (url.pathname === '/api/og' && req.method === 'GET') {
+      const raw = url.searchParams.get('name') || '';
+      const keys = [normalizeNameKey(raw), normalizeNameKey(nameFromSlug(raw))];
+      const p = state.planets.find((x) => !x.hidden && keys.includes(x.nameKey));
+      const planet = p ? { ...publicPlanet(p), artworkUrl: `http://localhost:${PORT}/api/dev-art/${p.artworkFile}` } : null;
+      const png = await renderCard(planet, { origin: 'http://localhost:5173' });
+      res.writeHead(200, { 'Content-Type': 'image/png', 'Cache-Control': 'no-store' });
+      return res.end(png);
     }
     if (url.pathname === '/api/report' && req.method === 'POST') {
       const { planetId } = await readBody(req);

@@ -26,8 +26,10 @@ function flatten(canvas, w = 512, h = 256) {
   ctx.drawImage(canvas, 0, 0, w, h);
   // compressed formats are 5-10x smaller than PNG and identical on a distant
   // sphere; the background is opaque so lossy encoding loses no transparency.
-  // PNG is the last-resort fallback for browsers that encode neither.
-  return encode(c, 'image/webp', 0.85) || encode(c, 'image/jpeg', 0.85) || c.toDataURL('image/png');
+  // JPEG first: the unfurl card (lib/og-card.js) is rendered by resvg, which
+  // reads JPEG and PNG but not WebP, so a WebP planet would preview without
+  // its face. PNG is the last-resort fallback.
+  return encode(c, 'image/jpeg', 0.86) || encode(c, 'image/webp', 0.85) || c.toDataURL('image/png');
 }
 
 // world state only: the planet's permanent parameters, never frame state.
