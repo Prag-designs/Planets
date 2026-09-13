@@ -390,6 +390,7 @@ const arrival = createArrival({
     creator.open();
   },
   onSongState: (state) => audio.duck(state === 'playing' || state === 'loading'),
+  onReport: (planet, reason) => reportPlanet(planet, reason),
   onWallpaper: (planet) => saveWallpaper({
     name: planet.name, message: planet.message, song: planet.song, artwork: planet.artwork,
     sealed: !!planet.sealed, revealAt: planet.revealAt,
@@ -676,34 +677,36 @@ async function landAt({ slug, keys }) {
 // dev-only diagnostic (fps / draw calls / tris) — never shown to real visitors
 const perf = import.meta.env.DEV ? createPerfPanel({ renderer, field }) : { tick() {} };
 
-// reporting: three DIFFERENT people reporting a planet removes it.
+// reporting: three DIFFERENT networks reporting a planet hide it, and the
+// project owner hears about every report with one-click links to act sooner.
 // The server derives the reporter identity; nothing personal is collected.
-document.querySelector('#planet-label .label-report').addEventListener('click', async () => {
-  const planet = focus.current;
-  if (!planet) return;
+async function reportPlanet(planet, reason = null) {
+  if (!planet) return { ok: false };
   clearTimeout(toastTimer);
+  let out = { ok: true, hidden: false };
   if (planet.remoteId) {
     // a report only reads as successful once it is actually recorded
-    const out = await reportPlanetRemote(planet.remoteId);
-    if (out && out.ok) {
-      toast.querySelector('.toast-name').textContent = 'reported';
-      toast.querySelector('.toast-sub').textContent = 'thanks';
-      if (out.hidden) {
-        focus.clear();
-        field.removePlanet(planet); // quietly gone — no celebration
-      }
-    } else {
-      toast.querySelector('.toast-name').textContent = 'the universe is temporarily unavailable';
-      toast.querySelector('.toast-sub').textContent = 'try again in a moment';
-      if (out && out.unavailable) universeStatus.classList.add('show');
+    out = await reportPlanetRemote(planet.remoteId, reason);
+  }
+  if (out && out.ok) {
+    toast.querySelector('.toast-name').textContent = 'reported';
+    toast.querySelector('.toast-sub').textContent = 'thanks · someone will look';
+    if (out.hidden) {
+      focus.clear();
+      field.removePlanet(planet); // quietly gone — no celebration
     }
   } else {
-    // procedural worlds have nothing to record — the quiet ack is honest
-    toast.querySelector('.toast-name').textContent = 'reported';
-    toast.querySelector('.toast-sub').textContent = 'thanks';
+    toast.querySelector('.toast-name').textContent = 'the universe is temporarily unavailable';
+    toast.querySelector('.toast-sub').textContent = 'try again in a moment';
+    if (out && out.unavailable) universeStatus.classList.add('show');
   }
   toast.classList.add('show');
   toastTimer = setTimeout(() => toast.classList.remove('show'), 2400);
+  return out;
+}
+// the small "report" under a planet's name opens the panel with the reasons out
+document.querySelector('#planet-label .label-report').addEventListener('click', () => {
+  if (focus.current) arrival.openReport(focus.current);
 });
 
 setTimeout(() => document.getElementById('hint').classList.add('faded'), 8000);

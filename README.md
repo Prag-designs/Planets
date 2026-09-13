@@ -56,6 +56,22 @@ no accounts · no logins · no tracking · no cookies — just two quiet, fair r
 
 → the full, plain-English story lives in [`PRIVACY.md`](PRIVACY.md).
 
+## 🚩 reporting, and what the owner sees
+
+Every planet has a **report** button (on the arrival panel, and the small link under a planet's
+name). The reporter picks a reason: spam, hateful, someone's private info, not for kids, other,
+plus an optional line. Three different networks still hide a planet on their own. On top of that,
+**every report notifies the project owner** the moment it lands (`lib/reports/notify.js`):
+
+- by **webhook** (`REPORT_WEBHOOK_URL`, a Discord or Slack incoming webhook), and/or
+- by **email** (`RESEND_API_KEY` + `REPORT_NOTIFY_EMAIL`).
+
+The message names the planet, the reason, how many networks have reported it, and carries **signed
+one-click links** to hide it or restore it (`api/moderate.js`). No login: each link is an HMAC over
+the action and the planet id with `MODERATION_SECRET`, so it can only do that one thing to that one
+planet. Nothing is ever deleted; hidden planets keep their row and files. The reporter stays a
+hashed network, never an address. Migration `007_report_reasons.sql`.
+
 ## 💌 planets for someone
 
 A planet can carry a **song** (a Spotify track or a YouTube video) and **one line** (80 characters).

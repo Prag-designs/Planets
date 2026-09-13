@@ -21,6 +21,8 @@ import { fetchSongTitle } from '../lib/song-meta.js';
 import { renderCard } from '../lib/og-card.js';
 import { decodeVoice } from '../lib/validate-voice.js';
 import { sanitizeRevealAt, sealCargo } from '../lib/reveal.js';
+import { sanitizeReason, composeReport, notifyOwner, verifyModerationSig } from '../lib/reports/notify.js';
+import { slugForName } from '../lib/song.js';
 
 const PORT = Number(process.env.PORT || 3000);
 const DIR = join(process.cwd(), '.dev-universe');
@@ -155,15 +157,35 @@ const server = http.createServer(async (req, res) => {
       return res.end(png);
     }
     if (url.pathname === '/api/report' && req.method === 'POST') {
-      const { planetId } = await readBody(req);
+      const { planetId, reason: rawReason } = await readBody(req);
       const p = state.planets.find((x) => x.id === planetId);
       if (!p) return json(res, 404, { ok: false, error: 'not_found' });
+      const reason = sanitizeReason(rawReason);
       const set = new Set(state.reports[planetId] || []);
+      const added = !set.has(ip);
       set.add(ip);
       state.reports[planetId] = [...set];
       if (set.size >= 3) p.hidden = true;
       save();
-      return json(res, 200, { ok: true, hidden: !!p.hidden });
+      json(res, 200, { ok: true, hidden: !!p.hidden });
+      if (added) {
+        const report = { planet: { id: p.id, name: p.name }, reason, distinct: set.size, hidden: !!p.hidden, origin: 'http://localhost:5173', slug: slugForName(p.name) };
+        const out = await notifyOwner(report); // real webhook/email if configured in the shell
+        console.log(`\n${composeReport(report).text}\n(owner notified via: ${out.delivered.join(', ') || 'nothing configured — printed here instead'})\n`);
+      }
+      return;
+    }
+    if (url.pathname === '/api/moderate' && req.method === 'GET') {
+      const planetId = url.searchParams.get('planet') || '';
+      const action = url.searchParams.get('action') || '';
+      const sig = url.searchParams.get('sig') || '';
+      const p = state.planets.find((x) => x.id === planetId);
+      if (!verifyModerationSig(planetId, action, sig)) { res.writeHead(403, { 'Content-Type': 'text/plain' }); return res.end('not a valid link'); }
+      if (!p) { res.writeHead(404, { 'Content-Type': 'text/plain' }); return res.end('no such planet'); }
+      p.hidden = action === 'hide';
+      save();
+      res.writeHead(200, { 'Content-Type': 'text/plain' });
+      return res.end(`"${p.name}" is now ${p.hidden ? 'hidden' : 'visible'}`);
     }
     if (url.pathname.startsWith('/api/dev-voice/') && req.method === 'GET') {
       const file = url.pathname.slice('/api/dev-voice/'.length).replace(/[^A-Za-z0-9._-]/g, '');

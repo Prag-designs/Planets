@@ -133,12 +133,12 @@ export async function fetchPlanetByName(name, { fresh = false } = {}) {
   }
 }
 
-export async function reportPlanetRemote(planetId) {
+export async function reportPlanetRemote(planetId, reason = null) {
   try {
     const res = await fetch('/api/report', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ planetId }),
+      body: JSON.stringify({ planetId, reason: reason || null }),
     });
     if (res.status === 503) return { ok: false, unavailable: true };
     if (!res.ok) return { ok: false, unavailable: IS_PROD };

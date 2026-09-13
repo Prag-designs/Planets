@@ -10,7 +10,9 @@ import { slugForName, songUrl } from '../../lib/song.js';
 // The song never starts on its own. The player (and every third-party byte)
 // exists only after the visitor taps play, and is torn down on leaving.
 
-export function createArrival({ onMakeOne, onSongState, onWallpaper, onReveal }) {
+const REPORT_REASONS = ['spam', 'hateful', 'someone’s private info', 'not for kids', 'other'];
+
+export function createArrival({ onMakeOne, onSongState, onWallpaper, onReveal, onReport }) {
   const el = document.createElement('div');
   el.id = 'arrival';
   el.innerHTML = `
@@ -34,6 +36,16 @@ export function createArrival({ onMakeOne, onSongState, onWallpaper, onReveal })
       </div>
       <div class="arr-player" aria-hidden="true"></div>
       <div class="arr-foot"></div>
+      <button class="arr-report" type="button">report this planet</button>
+      <div class="arr-report-box" hidden>
+        <div class="arr-report-reasons">${REPORT_REASONS.map((r) => `<button type="button" class="chip arr-reason" data-value="${r}">${r}</button>`).join('')}</div>
+        <input class="arr-report-text" maxlength="200" autocomplete="off" placeholder="anything else? (optional)" />
+        <div class="arr-report-actions">
+          <button type="button" class="arr-report-send btn-primary">send report</button>
+          <button type="button" class="arr-report-cancel btn-ghost">cancel</button>
+        </div>
+        <p class="arr-report-note">three different networks reporting a planet hide it. the project owner also sees every report and can act sooner.</p>
+      </div>
     </div>`;
   document.body.appendChild(el);
 
@@ -52,6 +64,11 @@ export function createArrival({ onMakeOne, onSongState, onWallpaper, onReveal })
   const sealSub = $('.arr-seal-sub');
   const voiceBtn = $('.arr-voice');
   const wallBtn = $('.arr-wall');
+  const reportBtn = $('.arr-report');
+  const reportBox = $('.arr-report-box');
+  const reportText = $('.arr-report-text');
+  const reportSend = $('.arr-report-send');
+  let reportReason = null;
   let watchdog = null;
   let sealTimer = null;
   let voiceEl = null; // an <audio> for the voice line, created on tap
@@ -130,6 +147,42 @@ export function createArrival({ onMakeOne, onSongState, onWallpaper, onReveal })
 
   makeBtn.addEventListener('click', () => { if (onMakeOne) onMakeOne(planet); });
 
+  // ---- reporting: a reason, one tap, the owner hears about it ----
+  function resetReport() {
+    reportBox.hidden = true;
+    reportReason = null;
+    reportText.value = '';
+    el.querySelectorAll('.arr-reason').forEach((b) => { b.dataset.on = ''; });
+    reportSend.disabled = false;
+    reportSend.textContent = 'send report';
+    reportBtn.hidden = false;
+  }
+  function openReportBox() {
+    reportBox.hidden = false;
+    reportBtn.hidden = true;
+  }
+  reportBtn.addEventListener('click', openReportBox);
+  $('.arr-report-cancel').addEventListener('click', resetReport);
+  el.querySelectorAll('.arr-reason').forEach((b) => b.addEventListener('click', () => {
+    el.querySelectorAll('.arr-reason').forEach((x) => { x.dataset.on = x === b ? '1' : ''; });
+    reportReason = b.dataset.value;
+  }));
+  reportSend.addEventListener('click', async () => {
+    if (!planet || !onReport) return;
+    const extra = reportText.value.replace(/\s+/g, ' ').trim();
+    const reason = [reportReason, extra].filter(Boolean).join(' · ').slice(0, 200) || null;
+    reportSend.disabled = true;
+    reportSend.textContent = 'sending…';
+    const out = await onReport(planet, reason);
+    if (out && out.ok) {
+      reportSend.textContent = 'reported · thanks';
+      setTimeout(() => { if (el.classList.contains('show')) resetReport(); }, 1600);
+    } else {
+      reportSend.disabled = false;
+      reportSend.textContent = 'try again in a moment';
+    }
+  });
+
   wallBtn.addEventListener('click', async () => {
     if (!planet || !onWallpaper) return;
     const prev = wallBtn.textContent;
@@ -183,15 +236,19 @@ export function createArrival({ onMakeOne, onSongState, onWallpaper, onReveal })
   }
 
   // show the panel for a planet. mode: 'link' (arrived by its address) | 'click'
-  function show(p, { mode: m = 'click' } = {}) {
+  // report: open with the report box already out (the label's report link)
+  function show(p, { mode: m = 'click', report = false } = {}) {
     if (planet && planet !== p) player.stop();
+    if (planet !== p) resetReport();
     planet = p;
     mode = m;
     const sealed = !!p.sealed && !p.mine;
     const hasSong = !sealed && !!p.song;
     const hasMsg = !sealed && !!p.message;
     const hasVoice = !sealed && !!p.voiceUrl;
-    if (!sealed && !hasSong && !hasMsg && !hasVoice && m !== 'link') { hide(); return; }
+    if (!report && !sealed && !hasSong && !hasMsg && !hasVoice && m !== 'link') { hide(); return; }
+    reportBtn.hidden = !!p.mine; // you don't report your own world
+    if (report) openReportBox();
 
     clearInterval(sealTimer);
     stopVoice();
@@ -230,6 +287,7 @@ export function createArrival({ onMakeOne, onSongState, onWallpaper, onReveal })
 
   function hide() {
     el.classList.remove('show');
+    resetReport();
     clearInterval(sealTimer);
     stopVoice();
     player.stop();
@@ -238,6 +296,7 @@ export function createArrival({ onMakeOne, onSongState, onWallpaper, onReveal })
 
   return {
     show, hide, player,
+    openReport: (p) => show(p, { mode: 'click', report: true }),
     isOpen: () => el.classList.contains('show'),
     current: () => planet,
     // the universe should not drift into its screensaver while someone is
