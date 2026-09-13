@@ -34,7 +34,7 @@ function flatten(canvas, w = 512, h = 256) {
 // The client proposes candidate stars (nearest-first) + the planet's visual
 // extent; the SERVER decides the final star and orbit (capacity is enforced
 // server-side, never here).
-export async function createPlanetRemote({ clientRef, name, canvas, candidates, extent, derived }) {
+export async function createPlanetRemote({ clientRef, name, canvas, candidates, extent, derived, song = null, message = null }) {
   let image;
   try {
     image = flatten(canvas);
@@ -55,6 +55,10 @@ export async function createPlanetRemote({ clientRef, name, canvas, candidates, 
     scale: derived.scale,
     rotationSpeed: derived.rotationSpeed,
     tilt: derived.tilt,
+    // a planet for someone: provider + bare id + start second (never the pasted
+    // URL), and one line. The server re-validates both.
+    song: song ? { provider: song.provider, id: song.id, start: song.start || 0 } : null,
+    message: message || null,
   };
   try {
     const res = await fetch('/api/create-planet', {
@@ -104,6 +108,20 @@ export async function searchPlanets(query) {
     return { results: Array.isArray(json.results) ? json.results : [] };
   } catch {
     return { results: [] };
+  }
+}
+
+// The exact lookup behind /p/<name>. Returns { planet } (name, createdAt,
+// starId, artworkUrl, song, message) or { notFound } / { unavailable }.
+export async function fetchPlanetByName(name) {
+  try {
+    const res = await fetch(`/api/planet?name=${encodeURIComponent(name)}`);
+    if (res.status === 404) return { notFound: true };
+    if (!res.ok) return { unavailable: true };
+    const json = await res.json();
+    return json && json.planet ? { planet: json.planet } : { notFound: true };
+  } catch {
+    return { unavailable: true };
   }
 }
 
