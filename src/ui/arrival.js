@@ -10,12 +10,16 @@ import { slugForName, songUrl } from '../../lib/song.js';
 // The song never starts on its own. The player (and every third-party byte)
 // exists only after the visitor taps play, and is torn down on leaving.
 
-export function createArrival({ onMakeOne, onSongState }) {
+export function createArrival({ onMakeOne, onSongState, onWallpaper, onReveal }) {
   const el = document.createElement('div');
   el.id = 'arrival';
   el.innerHTML = `
     <div class="arr-inner">
       <div class="arr-kicker"></div>
+      <div class="arr-seal" hidden>
+        <div class="arr-seal-count"></div>
+        <div class="arr-seal-sub"></div>
+      </div>
       <div class="arr-message"></div>
       <div class="arr-now" hidden>
         <span class="arr-eq" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
@@ -23,7 +27,9 @@ export function createArrival({ onMakeOne, onSongState }) {
       </div>
       <div class="arr-actions">
         <button class="arr-play btn-primary"></button>
+        <button class="arr-voice btn-primary" hidden>▶ hear their voice</button>
         <button class="arr-link btn-ghost">copy its link</button>
+        <button class="arr-wall btn-ghost">wallpaper</button>
         <button class="arr-make btn-ghost">make one back</button>
       </div>
       <div class="arr-player" aria-hidden="true"></div>
@@ -41,7 +47,14 @@ export function createArrival({ onMakeOne, onSongState }) {
   const mount = $('.arr-player'); // audio only: kept off-screen, never a video
   const now = $('.arr-now');
   const titleEl = $('.arr-title');
+  const sealEl = $('.arr-seal');
+  const sealCount = $('.arr-seal-count');
+  const sealSub = $('.arr-seal-sub');
+  const voiceBtn = $('.arr-voice');
+  const wallBtn = $('.arr-wall');
   let watchdog = null;
+  let sealTimer = null;
+  let voiceEl = null; // an <audio> for the voice line, created on tap
 
   let planet = null;
   let mode = 'click';
@@ -82,7 +95,10 @@ export function createArrival({ onMakeOne, onSongState }) {
     return `open it on <a href="${songUrl(p.song)}" target="_blank" rel="noopener noreferrer">${p.song.provider}</a> instead`;
   }
   function songLabel(p) {
-    return (p.song && p.song.title) ? p.song.title : 'their song';
+    if (!p.song || !p.song.title) return 'their song';
+    return p.song.title
+      .replace(/\s*[\(\[][^\)\]]*(official|video|audio|lyric|remaster|hd|4k|visuali[sz]er|mv)[^\)\]]*[\)\]]/gi, '')
+      .replace(/\s*\|.*$/, '').replace(/\s+/g, ' ').trim() || p.song.title;
   }
 
   function linkFor(p) {
@@ -114,20 +130,91 @@ export function createArrival({ onMakeOne, onSongState }) {
 
   makeBtn.addEventListener('click', () => { if (onMakeOne) onMakeOne(planet); });
 
+  wallBtn.addEventListener('click', async () => {
+    if (!planet || !onWallpaper) return;
+    const prev = wallBtn.textContent;
+    wallBtn.textContent = 'making it…';
+    try { const r = await onWallpaper(planet); wallBtn.textContent = r === 'downloaded' ? 'saved ✓' : prev; }
+    catch { wallBtn.textContent = prev; }
+    setTimeout(() => { wallBtn.textContent = prev; }, 1600);
+  });
+
+  // ---- the voice line: a plain <audio>, created on tap, gone on leaving ----
+  function stopVoice() {
+    if (voiceEl) { voiceEl.onended = null; voiceEl.onerror = null; voiceEl.pause(); voiceEl.removeAttribute('src'); voiceEl.load(); voiceEl = null; }
+    voiceBtn.textContent = '▶ hear their voice';
+    el.dataset.voice = 'idle';
+    if (onSongState) onSongState(player.state);
+  }
+  voiceBtn.addEventListener('click', () => {
+    if (!planet || !planet.voiceUrl) return;
+    if (voiceEl && !voiceEl.paused) { stopVoice(); return; }
+    if (player.state === 'playing') player.toggle(); // one voice at a time
+    voiceEl = new Audio(planet.voiceUrl);
+    voiceEl.preload = 'auto';
+    el.dataset.voice = 'playing';
+    voiceBtn.textContent = '■ stop';
+    if (onSongState) onSongState('playing'); // duck the soundscape the same way
+    voiceEl.onended = stopVoice;
+    voiceEl.onerror = () => { stopVoice(); voiceBtn.textContent = 'their voice won’t play here'; };
+    voiceEl.play().catch(() => { stopVoice(); voiceBtn.textContent = 'their voice won’t play here'; });
+  });
+
+  // ---- sealed: count down to the moment, then ask the app to open it ----
+  function fmtLeft(ms) {
+    const s = Math.max(0, Math.floor(ms / 1000));
+    const d = Math.floor(s / 86400), h = Math.floor((s % 86400) / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
+    if (d > 0) return `${d}d ${String(h).padStart(2, '0')}h ${String(m).padStart(2, '0')}m`;
+    if (h > 0) return `${h}h ${String(m).padStart(2, '0')}m ${String(sec).padStart(2, '0')}s`;
+    return `${m}m ${String(sec).padStart(2, '0')}s`;
+  }
+  function tickSeal() {
+    if (!planet || !planet.sealed) return;
+    const left = Date.parse(planet.revealAt) - Date.now();
+    if (left > 0) { sealCount.textContent = `opens in ${fmtLeft(left)}`; return; }
+    clearInterval(sealTimer);
+    sealCount.textContent = 'opening…';
+    const p = planet;
+    (onReveal ? onReveal(p) : Promise.resolve(false)).then((opened) => {
+      if (planet !== p) return;
+      if (opened) show(p, { mode: mode });
+      else { sealCount.textContent = 'opens any moment now'; sealTimer = setTimeout(tickSeal, 15000); }
+    });
+  }
+
   // show the panel for a planet. mode: 'link' (arrived by its address) | 'click'
   function show(p, { mode: m = 'click' } = {}) {
     if (planet && planet !== p) player.stop();
     planet = p;
     mode = m;
-    const hasSong = !!p.song;
-    const hasMsg = !!p.message;
-    if (!hasSong && !hasMsg && m !== 'link') { hide(); return; }
+    const sealed = !!p.sealed && !p.mine;
+    const hasSong = !sealed && !!p.song;
+    const hasMsg = !sealed && !!p.message;
+    const hasVoice = !sealed && !!p.voiceUrl;
+    if (!sealed && !hasSong && !hasMsg && !hasVoice && m !== 'link') { hide(); return; }
 
-    kicker.textContent = m === 'link'
-      ? (hasMsg || hasSong ? 'someone made this for you' : 'you were sent here')
-      : (hasMsg && hasSong ? 'a song and a line' : hasSong ? 'this planet has a song' : 'a line was left here');
+    clearInterval(sealTimer);
+    stopVoice();
+    sealEl.hidden = !sealed;
+    if (sealed) {
+      const waiting = [p.hasMessage && 'a line', p.hasSong && 'a song', p.hasVoice && 'a voice'].filter(Boolean);
+      sealSub.textContent = waiting.length ? `${waiting.join(', ')} waiting inside` : 'something is waiting inside';
+      tickSeal();
+      sealTimer = setInterval(tickSeal, 1000);
+    }
+
+    const carried = [hasMsg && 'a line', hasSong && 'a song', hasVoice && 'a voice'].filter(Boolean);
+    kicker.textContent = sealed
+      ? 'sealed · made for someone'
+      : m === 'link'
+        ? (carried.length ? 'someone made this for you' : 'you were sent here')
+        : (carried.length ? carried.join(' and ') : 'a planet');
+    if (p.mine && p.revealAt && Date.parse(p.revealAt) > Date.now()) {
+      kicker.textContent = `yours · sealed for everyone else until ${new Date(p.revealAt).toLocaleDateString(undefined, { day: 'numeric', month: 'long' })}`;
+    }
     message.textContent = hasMsg ? `“${p.message}”` : '';
     message.hidden = !hasMsg;
+    voiceBtn.hidden = !hasVoice;
     playBtn.hidden = !hasSong;
     now.hidden = !hasSong;
     titleEl.textContent = hasSong ? songLabel(p) : '';
@@ -137,11 +224,14 @@ export function createArrival({ onMakeOne, onSongState }) {
     el.dataset.song = player.state;
     el.dataset.provider = hasSong ? p.song.provider : '';
     el.dataset.mode = m;
+    el.dataset.sealed = sealed ? '1' : '';
     el.classList.add('show');
   }
 
   function hide() {
     el.classList.remove('show');
+    clearInterval(sealTimer);
+    stopVoice();
     player.stop();
     planet = null;
   }
@@ -152,6 +242,6 @@ export function createArrival({ onMakeOne, onSongState }) {
     current: () => planet,
     // the universe should not drift into its screensaver while someone is
     // reading what was left for them, or while their song is playing
-    holds: () => el.classList.contains('show') && (mode === 'link' || player.playing || player.state === 'loading'),
+    holds: () => el.classList.contains('show') && (mode === 'link' || player.playing || player.state === 'loading' || !!(voiceEl && !voiceEl.paused)),
   };
 }

@@ -77,6 +77,14 @@ visitor across the void to that planet, where the line appears with a play contr
 - Migration `005_gifts_and_daily_limit.sql` adds the columns and moves the creation limit to
   one per network per **day** (UTC), so a person can make a planet for a friend today and another
   for another friend tomorrow.
+- **Sealed until a day.** The maker can pick a date; until local midnight of that day the public
+  API returns the planet without its line, song and voice (`lib/reveal.js`, enforced on the
+  server), and the arrival panel counts down and opens it live when the moment comes.
+- **A voice line.** Up to ten seconds recorded in the browser (WebM/Opus, MP4/AAC on Safari),
+  validated by magic bytes and capped at 400KB (`lib/validate-voice.js`), stored as a file next to
+  the artwork. Played through a plain `<audio>` on tap; nothing loads before that.
+- **Wallpaper.** Any planet exports as a 1080x1920 phone wallpaper, drawn in the browser from the
+  artwork the renderer already holds (`src/wallpaper.js`). Migration `006_sealed_and_voice.sql`.
 
 ## 🚀 run it
 
